@@ -1,0 +1,755 @@
+{
+  "name": "Invoice",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "invoice",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "7c7d802c-8960-4a02-a18f-7354d3744a18",
+      "name": "Webhook",
+      "webhookId": "d8136ba1-bcd3-482b-ab19-90f619e5fc73"
+    },
+    {
+      "parameters": {
+        "operation": "pdf",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1.1,
+      "position": [
+        208,
+        0
+      ],
+      "id": "a4ee17a4-0ae9-498e-afaf-52565653d753",
+      "name": "Extract from File"
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-4.1-mini",
+          "mode": "list",
+          "cachedResultName": "GPT-4.1-MINI"
+        },
+        "responses": {
+          "values": [
+            {
+              "role": "system",
+              "content": "You are an invoice data extraction assistant.\n\nYour job is to analyze invoice text and extract accurate structured information.\n\nExtract ONLY the following fields:\n- vendor_name\n- invoice_number\n- invoice_date\n- due_date\n- amount\n- currency\n\nRules:\n- Do not guess or invent missing information.\n- If a field is missing, return null.\n- Preserve the invoice number exactly as written.\n- Return the total invoice amount, not an individual line-item amount.\n- Return the amount as a number without currency symbols or commas.\n- Return dates in YYYY-MM-DD format when the date is available.\n- Return ONLY valid JSON."
+            },
+            {
+              "content": "=Extract the invoice information from the following invoice text.\n\nInvoice text:\n{{ $json.text }}\n\nReturn the result using exactly this JSON structure:\n\n{\n  \"vendor_name\": \"\",\n  \"invoice_number\": \"\",\n  \"invoice_date\": \"\",\n  \"due_date\": \"\",\n  \"amount\": 0,\n  \"currency\": \"\"\n}"
+            }
+          ]
+        },
+        "builtInTools": {},
+        "options": {
+          "textFormat": {
+            "textOptions": {
+              "type": "json_object"
+            }
+          }
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 2.3,
+      "position": [
+        336,
+        16
+      ],
+      "id": "d9b493e6-f2db-410d-bd38-7f3cf7612c17",
+      "name": "Message a model",
+      "credentials": {
+        "openAiApi": {
+          "id": "YOUR_OPENAI_CREDENTIAL_ID",
+          "name": "OpenAI account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "ad89201d-8e67-4f57-b9b4-1c89d5f19df8",
+              "leftValue": "={{ Object.keys($json).length }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        976,
+        0
+      ],
+      "id": "b1be7f6f-102e-47c9-9814-58f572876d3f",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "Invoice",
+        "returnAll": true,
+        "matchType": "allFilters",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "vendor_name",
+              "condition": "eq",
+              "keyValue": "={{ $json.output[0].content[0].text.vendor_name }}"
+            },
+            {
+              "keyName": "invoice_number",
+              "condition": "eq",
+              "keyValue": "={{ $json.output[0].content[0].text.invoice_number }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        768,
+        0
+      ],
+      "id": "282e1768-f8f3-4642-920c-8efc69093804",
+      "name": "Get many rows",
+      "alwaysOutputData": true,
+      "credentials": {
+        "supabaseApi": {
+          "id": "YOUR_SUPABASE_CREDENTIAL_ID",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-4.1-mini",
+          "mode": "list",
+          "cachedResultName": "GPT-4.1-MINI"
+        },
+        "responses": {
+          "values": [
+            {
+              "role": "system",
+              "content": "=You are an accounts-payable fraud detection assistant.\n\nWrite a concise, professional internal email alert about a potentially duplicated invoice.\n\nThe email must:\n- Clearly state that a potential duplicate invoice was detected.\n- Include the vendor name.\n- Include the invoice number.\n- Include the invoice amount and currency.\n- Explain that the invoice matches an existing record in the database.\n- Tell the recipient to review the invoice before any payment is made.\n- Do not claim that fraud has been confirmed.\n- Do not invent any information.\n- Do not include a subject line.\n- Return only the email body.\n\nexcatly end with \nBest Regards\nYour Name\nstart with dear manager thats it no manage rname required"
+            },
+            {
+              "content": "=Create a potential duplicate invoice alert using these details:\n\nVendor: {{ $('Get many rows').item.json.vendor_name }}\nInvoice Number: {{ $('Get many rows').item.json.invoice_number }}\nAmount: {{ $('Get many rows').item.json.amount }}\n\nThe invoice was found to match an existing invoice record in the database."
+            }
+          ]
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 2.3,
+      "position": [
+        1216,
+        -112
+      ],
+      "id": "7e843e29-e9ab-44b5-a2e8-7b8757a961e0",
+      "name": "Message a model1",
+      "credentials": {
+        "openAiApi": {
+          "id": "YOUR_OPENAI_CREDENTIAL_ID",
+          "name": "OpenAI account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sendTo": "example@email.com ",
+        "subject": "Fraud alert",
+        "emailType": "text",
+        "message": "={{ $json.output[0].content[0].text }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        1712,
+        -112
+      ],
+      "id": "85bb2a89-2a17-4365-87e6-d324b4432a50",
+      "name": "Send a message",
+      "webhookId": "19444609-f2cf-4f2c-b2e2-a9596bfa0e45",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "YOUR_GMAIL_CREDENTIAL_ID",
+          "name": "Gmail account 5"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "c1f8a9f4-d9c2-4310-b5e2-8ca54a94c2f9",
+              "leftValue": "={{ Number($('Message a model').item.json.output[0].content[0].text.amount) }}",
+              "rightValue": 5000,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1184,
+        192
+      ],
+      "id": "1550f672-aae9-44ec-b178-1201490bcda5",
+      "name": "If1"
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-4.1-mini",
+          "mode": "list",
+          "cachedResultName": "GPT-4.1-MINI"
+        },
+        "responses": {
+          "values": [
+            {
+              "role": "system",
+              "content": "You are an HR/accounts payable automation assistant.\n\nWrite a professional, concise manager approval request for an invoice that exceeds the $5,000 approval threshold.\n\nThe manager should be asked to review and approve the invoice before it is processed.\n\nDo not mention AI or automation.\nDo not invent any information.\nUse only the invoice details provided.\nexcatly end with \nBest Regards\nYour Name\nstart with dear manager thats it no manage rname required"
+            },
+            {
+              "content": "=Create a manager approval email using these invoice details:\n\nVendor: {{ $('Message a model').item.json.output[0].content[0].text.vendor_name }}\nInvoice Number: {{ $('Message a model').item.json.output[0].content[0].text.invoice_number }}\nInvoice Date: {{ $('Message a model').item.json.output[0].content[0].text.invoice_date }}\nDue Date: {{ $('Message a model').item.json.output[0].content[0].text.due_date }}\nAmount: {{ $('Message a model').item.json.output[0].content[0].text.amount }} {{ $('Message a model').item.json.output[0].content[0].text.currency }}\n\nThe invoice exceeds the $5,000 approval threshold.\n\nAsk the manager to review and approve or reject the invoice."
+            }
+          ]
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 2.3,
+      "position": [
+        1488,
+        144
+      ],
+      "id": "4d05ea77-de34-49d7-b04c-e281c2cfb04d",
+      "name": "Message a model2",
+      "credentials": {
+        "openAiApi": {
+          "id": "YOUR_OPENAI_CREDENTIAL_ID",
+          "name": "OpenAI account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sendTo": "example@email.com ",
+        "subject": "=Manager Approval Required – Invoice {{ $('Message a model').item.json.output[0].content[0].text.invoice_number }}",
+        "emailType": "text",
+        "message": "={{ $json.output[0].content[0].text }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        1840,
+        144
+      ],
+      "id": "109165dd-98ec-43fe-8509-b2ffc355313c",
+      "name": "Send a message1",
+      "webhookId": "b181d2db-ff66-4ff8-bc62-610c658d2ff0",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "YOUR_GMAIL_CREDENTIAL_ID",
+          "name": "Gmail account 5"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "tableId": "Invoice",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "vendor_name",
+              "fieldValue": "={{ $('Message a model').item.json.output[0].content[0].text.vendor_name }}"
+            },
+            {
+              "fieldId": "invoice_number",
+              "fieldValue": "={{ $('Message a model').item.json.output[0].content[0].text.invoice_number }}"
+            },
+            {
+              "fieldId": "invoice_date",
+              "fieldValue": "={{ $('Message a model').item.json.output[0].content[0].text.invoice_date }}"
+            },
+            {
+              "fieldId": "due_date",
+              "fieldValue": "={{ $('Message a model').item.json.output[0].content[0].text.due_date }}"
+            },
+            {
+              "fieldId": "amount",
+              "fieldValue": "={{ $('Message a model').item.json.output[0].content[0].text.amount }}"
+            },
+            {
+              "fieldId": "currency",
+              "fieldValue": "={{ $('Message a model').item.json.output[0].content[0].text.currency }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        1376,
+        352
+      ],
+      "id": "303fa885-34d6-4cce-931c-da79b3cff0e3",
+      "name": "Create a row",
+      "credentials": {
+        "supabaseApi": {
+          "id": "YOUR_SUPABASE_CREDENTIAL_ID",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_GOOGLE_SHEET_ID",
+          "mode": "list",
+          "cachedResultName": "invoice",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/YOUR_GOOGLE_SHEET_ID/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/YOUR_GOOGLE_SHEET_ID/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "A": "={{ $json.vendor_name }}",
+            "B": "={{ $json.invoice_number }}",
+            "C": "={{ $json.invoice_date }}",
+            "D": "={{ $json.due_date }}",
+            "E": "={{ $json.amount }}",
+            "F": "={{ $json.currency }}",
+            "           G": "={{ $('Message a model4').item.json.output[0].content[0].text.risk_level }}",
+            "           H": "={{ $('Message a model4').item.json.output[0].content[0].text.risk_reason }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "A",
+              "displayName": "A",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "B",
+              "displayName": "B",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "C",
+              "displayName": "C",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "D",
+              "displayName": "D",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "E",
+              "displayName": "E",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "F",
+              "displayName": "F",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "           G",
+              "displayName": "           G",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "           H",
+              "displayName": "           H",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1584,
+        352
+      ],
+      "id": "41507e56-97a1-4732-b58e-8bba87f1ea12",
+      "name": "Append row in sheet",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "YOUR_GOOGLE_SHEETS_CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-4.1-mini",
+          "mode": "list",
+          "cachedResultName": "GPT-4.1-MINI"
+        },
+        "responses": {
+          "values": [
+            {
+              "role": "system",
+              "content": "You are an accounts payable assistant. Write a professional, concise confirmation email to a vendor regarding their invoice.\n\nThe invoice has passed the initial automated checks and has been recorded successfully.\n\nDo not mention AI or automation.\nDo not invent information.\nDo not guarantee payment.\nUse only the invoice details provided.\nstart excatly with Dear manager \nend with \nbest regards Your Name\n"
+            },
+            {
+              "content": "=Write a confirmation email using these invoice details:\n\nVendor: {{ $('Message a model').item.json.output[0].content[0].text.vendor_name }}\nInvoice Number: {{ $('Message a model').item.json.output[0].content[0].text.invoice_number }}\nInvoice Date: {{ $('Message a model').item.json.output[0].content[0].text.invoice_date }}\nAmount: {{ $('Message a model').item.json.output[0].content[0].text.amount }} {{ $('Message a model').item.json.output[0].content[0].text.currency }}\nRisk Level:{{ $('Message a model4').item.json.output[0].content[0].text.risk_level }}\nRisk Reason:{{ $('Message a model4').item.json.output[0].content[0].text.risk_reason }}\nDue Date: {{ $('Message a model').item.json.output[0].content[0].text.due_date }}\n\nConfirm that the invoice has been received and recorded for processing."
+            }
+          ]
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 2.3,
+      "position": [
+        1888,
+        352
+      ],
+      "id": "2884e84c-48a3-405c-9e82-c6a039b8e79f",
+      "name": "Message a model3",
+      "credentials": {
+        "openAiApi": {
+          "id": "YOUR_OPENAI_CREDENTIAL_ID",
+          "name": "OpenAI account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sendTo": "example@email.com ",
+        "subject": "=Invoice Received & Recorded – {{ $('Message a model').item.json.output[0].content[0].text.invoice_number }}",
+        "emailType": "text",
+        "message": "={{ $json.output[0].content[0].text }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        2240,
+        352
+      ],
+      "id": "760cd597-7312-4881-a60c-506a41b0718a",
+      "name": "Send a message2",
+      "webhookId": "21593b28-40bb-4017-b654-478b3d0dd2a3",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "YOUR_GMAIL_CREDENTIAL_ID",
+          "name": "Gmail account 5"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-4.1-mini",
+          "mode": "list",
+          "cachedResultName": "GPT-4.1-MINI"
+        },
+        "responses": {
+          "values": [
+            {
+              "role": "system",
+              "content": "You are an invoice risk assessment assistant.\n\nAnalyze the invoice information and assign a risk level.\n\nReturn ONLY valid JSON using exactly this structure:\n\n{\n  \"risk_level\": \"\",\n  \"risk_reason\": \"\"\n}\n\nRisk levels must be one of:\n- LOW\n- MEDIUM\n- HIGH\n\nRules:\n- LOW: invoice passed the duplicate check and is within the standard processing threshold.\n- MEDIUM: invoice has a characteristic that requires additional review but is not necessarily suspicious.\n- HIGH: invoice contains strong indicators of fraud or unusual activity.\n\nDo not invent information.\nUse only the invoice information provided."
+            },
+            {
+              "content": "=Assess this invoice:\n\nVendor: {{ $('Message a model').item.json.output[0].content[0].text.vendor_name }}\nInvoice Number: {{ $('Message a model').item.json.output[0].content[0].text.invoice_number }}\nInvoice Date: {{ $('Message a model').item.json.output[0].content[0].text.invoice_date }}\nDue Date: {{ $('Message a model').item.json.output[0].content[0].text.due_date }}\nAmount: {{ $('Message a model').item.json.output[0].content[0].text.amount }}\nCurrency: {{ $('Message a model').item.json.output[0].content[0].text.currency }}"
+            }
+          ]
+        },
+        "builtInTools": {},
+        "options": {
+          "textFormat": {
+            "textOptions": {
+              "type": "json_object"
+            }
+          }
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 2.3,
+      "position": [
+        544,
+        352
+      ],
+      "id": "df1e76ac-7180-4ad1-8d2a-09cf904d515a",
+      "name": "Message a model4",
+      "credentials": {
+        "openAiApi": {
+          "id": "YOUR_OPENAI_CREDENTIAL_ID",
+          "name": "OpenAI account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Extract from File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract from File": {
+      "main": [
+        [
+          {
+            "node": "Message a model",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Message a model": {
+      "main": [
+        [
+          {
+            "node": "Message a model4",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get many rows": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Message a model1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "If1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Message a model1": {
+      "main": [
+        [
+          {
+            "node": "Send a message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If1": {
+      "main": [
+        [
+          {
+            "node": "Message a model2",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Create a row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Message a model2": {
+      "main": [
+        [
+          {
+            "node": "Send a message1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create a row": {
+      "main": [
+        [
+          {
+            "node": "Append row in sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Append row in sheet": {
+      "main": [
+        [
+          {
+            "node": "Message a model3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Message a model3": {
+      "main": [
+        [
+          {
+            "node": "Send a message2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Message a model4": {
+      "main": [
+        [
+          {
+            "node": "Get many rows",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "5c6b914c-e0d7-4e40-a476-d9d0ff9f2a79",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "YOUR_N8N_INSTANCE_ID"
+  },
+  "nodeGroups": [],
+  "id": "bn03Dn2KdPYbKIr8",
+  "tags": []
+}

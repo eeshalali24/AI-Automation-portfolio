@@ -1,0 +1,794 @@
+{
+  "name": "HR Screening 2 - task",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "hr-application",
+        "options": {}
+      },
+      "name": "1. Webhook - Candidate Application",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -224,
+        160
+      ],
+      "id": "72ad8140-9cec-4e58-b5ea-a8ac6b675388",
+      "webhookId": "hr-application-webhook"
+    },
+    {
+      "parameters": {
+        "operation": "pdf",
+        "binaryPropertyName": "resume",
+        "options": {}
+      },
+      "name": "2. Extract Resume Text (PDF)",
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1,
+      "position": [
+        0,
+        304
+      ],
+      "id": "9edc9cf6-f5a4-468a-aa2d-bc6677ab3f28"
+    },
+    {
+      "parameters": {
+        "tableId": "candidatesHR",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "full_name",
+              "fieldValue": "={{ $node[\"1. Webhook - Candidate Application\"].json.body.fullName }}"
+            },
+            {
+              "fieldId": "email",
+              "fieldValue": "={{ $node[\"1. Webhook - Candidate Application\"].json.body.email }}"
+            },
+            {
+              "fieldId": "missing_skills",
+              "fieldValue": "={{ $('Message a model').item.json.output[0].content[0].text.missing_skills }}"
+            },
+            {
+              "fieldId": "critical_gaps",
+              "fieldValue": "={{ $('Message a model').item.json.output[0].content[0].text.critical_gaps }}"
+            },
+            {
+              "fieldId": "overall_reason",
+              "fieldValue": "={{ $('Message a model').item.json.output[0].content[0].text.overall_reason }}"
+            },
+            {
+              "fieldId": "interview_focus",
+              "fieldValue": "={{ $json.output[0].content[0].text.interview_focus }}"
+            },
+            {
+              "fieldId": "resume_score",
+              "fieldValue": "={{ $('Message a model').item.json.output[0].content[0].text.resume_score }}"
+            },
+            {
+              "fieldId": "existing_skills",
+              "fieldValue": "={{ $('Message a model').item.json.output[0].content[0].text.existing_skills }}"
+            },
+            {
+              "fieldId": "status",
+              "fieldValue": "pending"
+            },
+            {
+              "fieldId": "form_id",
+              "fieldValue": "pending"
+            },
+            {
+              "fieldId": "form_url",
+              "fieldValue": "pending"
+            },
+            {
+              "fieldId": "mcq_score",
+              "fieldValue": "pending"
+            },
+            {
+              "fieldId": "assessment_result",
+              "fieldValue": "pending"
+            }
+          ]
+        }
+      },
+      "name": "5. Supabase - Initial Candidate Record",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        928,
+        304
+      ],
+      "id": "3c3f9b45-f0d9-4e6d-a3ef-87bd2d855506",
+      "credentials": {
+        "supabaseApi": {
+          "id": "YOUR_SUPABASE_CREDENTIAL_ID",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $('Message a model').item.json.output[0].content[0].text.resume_score }}",
+              "rightValue": 60,
+              "operator": {
+                "type": "number",
+                "operation": "gte"
+              },
+              "id": "3921d003-5864-4fdf-a8d6-a8b5f659075c"
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "name": "6. IF - Resume Score >= 60",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1136,
+        304
+      ],
+      "id": "3874ea65-f69f-491d-9b03-78859bc4e1c4"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "tableId": "candidatesHR",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "email",
+              "condition": "eq",
+              "keyValue": "={{ $('1. Webhook - Candidate Application').item.json.body.email }}"
+            }
+          ]
+        },
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "status",
+              "fieldValue": "Resume Screening Failed"
+            },
+            {
+              "fieldId": "resume_score",
+              "fieldValue": "={{ $json.resume_score }}"
+            }
+          ]
+        }
+      },
+      "name": "7A. Supabase - Update Resume Screening Failed",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        1344,
+        544
+      ],
+      "id": "c6d8a7a8-6115-49c8-8d8a-94b962eda14a",
+      "credentials": {
+        "supabaseApi": {
+          "id": "YOUR_SUPABASE_CREDENTIAL_ID",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-4.1-mini",
+          "mode": "list",
+          "cachedResultName": "GPT-4.1-MINI"
+        },
+        "responses": {
+          "values": [
+            {
+              "role": "system",
+              "content": "=You are an expert technical recruiter and HR Manager. Your job is to strictly analyze the provided Candidate Resume against the Target Job Description (JD).\n\nYour evaluation must be evidence-based and focused only on the requirements of the specific JD provided by the employer.\n\nAnalyze the candidate using the following criteria:\n\n1. Resume Score\nDetermine how closely the candidate's demonstrated qualifications match the requirements of the JD.\n\nThe resume_score must be a percentage from 0 to 100.\n\nConsider:\n- Required years of experience\n- Required technical skills\n- Required tools and technologies\n- Required responsibilities\n- Required seniority\n- Relevant projects\n- Relevant professional experience\n- Evidence of actual hands-on use\n\nDo not give credit for skills that are not demonstrated in the resume.\n\nUse the following general scoring guidance:\n\n90-100 = Exceptional match\n80-89 = Strong match\n70-79 = Good match\n60-69 = Borderline match\n40-59 = Weak match\n0-39 = Poor match\n\n2. Existing Skills\nList the relevant skills from the candidate's resume that match or directly support requirements in the JD.\n\nOnly include skills that are actually stated or clearly demonstrated in the resume.\n\n3. Missing Skills\nList requirements from the JD that are not found or demonstrated anywhere in the candidate's resume.\n\nDo not assume that the candidate has a skill simply because they have a related skill.\n\n4. Critical Gaps\nFrom the missing skills, identify only the requirements that are critical to successfully performing this particular role.\n\nDo not treat every missing skill as a critical gap.\n\n5. Uncertain Skills\nIdentify skills that appear in the resume but are not supported by enough evidence to determine the candidate's actual proficiency.\n\nExamples of weak evidence include:\n- Skill listed only in a skills section\n- Skill mentioned without a project\n- Skill mentioned without responsibilities\n- Skill mentioned without duration or meaningful usage\n- Generic claims without supporting evidence\n\nDo not classify a skill as uncertain if the resume provides strong evidence of actual use.\n\n6. Overall Reason\nProvide a concise 2-4 sentence explanation of why the candidate received the resume_score.\n\nThe explanation must mention the strongest relevant match and the most important gap or limitation, when applicable.\n\nIMPORTANT RULES:\n\n- Do not invent skills, experience, projects, certifications, technologies, employers, or achievements.\n- Do not infer skills from the candidate's job title alone.\n- Do not assume knowledge of a technology because the candidate knows a related technology.\n- Use only information contained in the JD and candidate resume.\n- If information is unavailable, treat it as unavailable.\n- Evaluate the candidate only against the specific JD provided.\n- Do not use age, gender, nationality, religion, ethnicity, marital status, photograph, or other protected personal characteristics when evaluating the candidate.\n- Be strict and consistent.\n- Do not inflate the score.\n\nReturn the result according to the structured output format configured for this node.\n"
+            },
+            {
+              "content": "=JOB DESCRIPTION:\n{{ $('1. Webhook - Candidate Application').item.json.body.jobDescription }}\n\nCANDIDATE NAME:\n\n{{ $node[\"1. Webhook - Candidate Application\"].json.body.fullName }}\n\nCANDIDATE MOTIVATION:\n\n{{ $node[\"1. Webhook - Candidate Application\"].json.body.motivation }}\n\nCANDIDATE RESUME:\n\n{{ $json.text }}\n\nAnalyze the candidate against the Job Description using the instructions in the system prompt.\n\nReturn ONLY the required JSON object.\n"
+            }
+          ]
+        },
+        "builtInTools": {},
+        "options": {
+          "textFormat": {
+            "textOptions": {
+              "type": "json_object"
+            }
+          }
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 2.3,
+      "position": [
+        208,
+        304
+      ],
+      "id": "7dbebd1e-a70e-4040-893d-99009acfa6b8",
+      "name": "Message a model",
+      "credentials": {
+        "openAiApi": {
+          "id": "YOUR_OPENAI_CREDENTIAL_ID",
+          "name": "OpenAI account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-4.1-mini",
+          "mode": "list",
+          "cachedResultName": "GPT-4.1-MINI"
+        },
+        "responses": {
+          "values": [
+            {
+              "role": "system",
+              "content": "=You are a senior technical recruiter and structured interview designer.\n\nYour task is to generate targeted interview focus areas for a human interviewer using the candidate's resume, Job Description, and previous resume-screening analysis.\n\nThe purpose is NOT to repeat the resume screening.\n\nYour purpose is to identify areas that require verification, clarification, or deeper investigation during the interview.\n\nPRIORITY ORDER:\n\n1. Critical gaps\n2. Uncertain skills\n3. Important JD requirements with weak evidence\n4. Claims on the resume that require validation\n5. Strong skills that should be validated when they are important to the role\n\nINTERVIEW DESIGN RULES:\n\n* Every focus area must be relevant to the role.\n* Prefer specific technical or professional areas over generic questions.\n* Do not ask questions about information that is already clearly established unless validation is useful.\n* Do not invent experience or skills.\n* Do not assume a candidate is dishonest because evidence is weak.\n* Treat uncertainty as something to verify, not as proof of incompetence.\n* Questions should help determine actual depth, ownership, practical experience, and problem-solving ability.\n* When possible, ask questions that require the candidate to explain a real example, implementation decision, challenge, or trade-off.\n* Avoid questions based on protected characteristics or personal demographic information.\n* Do not use the candidate's age, gender, nationality, religion, ethnicity, marital status, photograph, or similar characteristics.\n\nFOCUS AREA TYPES MAY INCLUDE:\n\n* Technical depth\n* Practical implementation\n* Architecture/design\n* Troubleshooting\n* Ownership\n* Project experience\n* Tool proficiency\n* Leadership/seniority\n* Communication\n* Missing requirement verification\n\nFor each focus area provide:\n\n* the area to investigate\n* priority\n* why it needs investigation\n* one practical interview question\n\nGenerate 3-5 focus areas.\n\nPrioritize High priority areas first.\n\nOUTPUT RULES:\n\nReturn ONLY valid JSON.\nNo Markdown.\nNo code fences.\nNo commentary.\nNo additional keys.\n\nEXACT SCHEMA:\n\n{\n\"interview_focus\": [\n{\n\"focus_area\": \"\",\n\"priority\": \"High\",\n\"reason_to_investigate\": \"\",\n\"suggested_question\": \"\"\n}\n]\n}\n\nPriority must be exactly one of:\n\"High\", \"Medium\", \"Low\".\n\n"
+            },
+            {
+              "content": "=CANDIDATE RESUME TEXT:\n{{ $node[\"2. Extract Resume Text (PDF)\"].json.text }}\n\nSCREENING ANALYSIS:\nResume score:{{ $json.output[0].content[0].text.resume_score }}\nExisting skills:{{ $json.output[0].content[0].text.existing_skills }}\nMissing skills: {{ $json.output[0].content[0].text.missing_skills }}\nCritical gaps: {{ $json.output[0].content[0].text.critical_gaps }} \nOverall reason: \n{{ $json.output[0].content[0].text.overall_reason }}"
+            }
+          ]
+        },
+        "builtInTools": {},
+        "options": {
+          "textFormat": {
+            "textOptions": {
+              "type": "json_object"
+            }
+          }
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 2.3,
+      "position": [
+        560,
+        304
+      ],
+      "id": "c5167ff0-278b-491a-a05a-ad7b8380d955",
+      "name": "Message a model1",
+      "credentials": {
+        "openAiApi": {
+          "id": "YOUR_OPENAI_CREDENTIAL_ID",
+          "name": "OpenAI account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-4.1-mini",
+          "mode": "list",
+          "cachedResultName": "GPT-4.1-MINI"
+        },
+        "responses": {
+          "values": [
+            {
+              "role": "system",
+              "content": "=SYSTEM:\nYou are a technical assessment designer. Create a personalized multiple-choice quiz for THIS\ncandidate targeting their weakest / uncertain skills relative to the job requirements, plus 1-2\nquestions confirming their strongest claimed skills. Respond ONLY with valid JSON using\nEXACTLY this schema:\n{\n  \"quiz_title\": \"<string>\",\n  \"questions\": [\n    { \"question\": \"<string>\", \"options\": [\"<string>\",\"<string>\",\"<string>\",\"<string>\"],\n      \"correct_answer_index\": <integer 0-3>, \"skill_tested\": \"<string>\" }\n  ]\n}\nGenerate exactly 10 questions.\n\n"
+            },
+            {
+              "content": "=USER:\nJOB REQUIREMENTS: {{ $('1. Webhook - Candidate Application').item.json.body.jobDescription }}\nCANDIDATE RESUME TEXT: \n{{ $('2. Extract Resume Text (PDF)').item.json.text }}\nEXISTING SKILLS:{{ $('Message a model').item.json.output[0].content[0].text.existing_skills }}\nMISSING SKILLS: {{ $('Message a model').item.json.output[0].content[0].text.missing_skills }}"
+            }
+          ]
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 2.3,
+      "position": [
+        1280,
+        48
+      ],
+      "id": "a3fa446e-7a3e-45a4-8db1-59d0f7dfd2dc",
+      "name": "Message a model2",
+      "credentials": {
+        "openAiApi": {
+          "id": "YOUR_OPENAI_CREDENTIAL_ID",
+          "name": "OpenAI account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-4.1-mini",
+          "mode": "list",
+          "cachedResultName": "GPT-4.1-MINI"
+        },
+        "responses": {
+          "values": [
+            {
+              "role": "system",
+              "content": "=You are an HR recruitment assistant. Write professional, friendly, concise candidate emails.\n\nFollow these rules exactly:\n\n* Start the email directly with: \"Dear [Candidate Name],\"\n* Do not include any greeting or introductory line before \"Dear [Candidate Name],\"\n* End the email exactly with:\n  Best regards,\n  Your Name\n* Do not add any text after \"Your Name.\"\n* Never mention AI or automation.\n* Never guarantee an interview.\n* Never invent deadlines, requirements, or other information.\n* Clearly communicate the candidate's current recruitment stage.\n* Keep the tone professional, warm, and respectful.\n* State clearly that the technical assessment must be completed within 6 hours of receiving the email.\n* Clearly introduce the assessment link and make it easy for the candidate to identify and access it.\n* Clearly state that the candidate must achieve a minimum score of 50% in the technical assessment to proceed to the interview stage.\n* Explain that achieving 50% or higher makes the candidate eligible to proceed to the interview stage, but does not guarantee an interview.\n* End the main message with a brief, professional \"Best of luck\" or equivalent.\n* Include a clear subject line.\n\n\n"
+            },
+            {
+              "content": "=Write an email to the following shortlisted candidate.\n\nCandidate name: {{ $('1. Webhook - Candidate Application').item.json.body.fullName }}\n\n\nTechnical assessment link: {{ $json.responderUri }}\n\nTell the candidate:\n\n1. They have been shortlisted for the next stage of the recruitment process.\n2. Before proceeding to the interview stage, they need to complete the technical assessment.\n3. They must complete the assessment within 6 hours of receiving this email.\n4. Clearly tell them that the assessment link is provided below.\n5. Include the technical assessment link exactly as provided.\n6. After they complete the assessment, the recruitment team will review their results and contact them regarding the next steps.\n7. Do not add any information that was not provided.\n\nReturn only:\n\nSubject: [subject]\n\nDear [Candidate Name],\n\n[Email body]\n\nBest regards,\nYour Name\n"
+            }
+          ]
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 2.3,
+      "position": [
+        2912,
+        -48
+      ],
+      "id": "daa76673-eeb7-45f7-b5b0-5ce4679d7dde",
+      "name": "Message a model3",
+      "credentials": {
+        "openAiApi": {
+          "id": "YOUR_OPENAI_CREDENTIAL_ID",
+          "name": "OpenAI account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-4.1-mini",
+          "mode": "list",
+          "cachedResultName": "GPT-4.1-MINI"
+        },
+        "responses": {
+          "values": [
+            {
+              "role": "system",
+              "content": "=SYSTEM:\nYou write candidate rejection emails on behalf of an HR team.\nNEVER mention any score, internal reasoning, missing skills, critical gaps, or other candidates.\nKeep it under 120 words, polite, respectful, and leave the door open for future roles.\n\nSTRICT FORMAT RULES:\n1. The email body must start EXACTLY with the word Dear, followed by the candidate's first name\n   only, followed by a comma - e.g. \"Dear Sara,\" - as the very first line. Nothing before it.\n   Use the actual name given below, never a placeholder.\n2. The email body must end EXACTLY with these two lines and nothing after them:\nBest regards,\nYour Name\n3. Do not add a subject line inside the body. Do not add placeholders, brackets, extra sign-offs,\n   P.S. lines, disclaimers, or any line before \"Dear\" or after \"Your Name\".\n4. Do not use markdown formatting (no **, no #, no bullet points).\n\nRespond ONLY with a single valid JSON object, no markdown fences, no commentary, using EXACTLY\nthis schema:\n{\"subject\": \"<short professional subject line, no punctuation tricks>\",\n \"body_html\": \"<the full email as plain paragraphs separated by <br><br>, following the strict\n format rules above>\"}\n\n"
+            },
+            {
+              "content": "=USER:\nCandidate name: {{ $('1. Webhook - Candidate Application').item.json.body.fullName }}\n\n\nWrite the rejection email now, following the format rules exactly."
+            }
+          ]
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 2.3,
+      "position": [
+        1536,
+        800
+      ],
+      "id": "9febb6da-7f57-46a7-b116-199232e6e24a",
+      "name": "Message a model4",
+      "credentials": {
+        "openAiApi": {
+          "id": "YOUR_OPENAI_CREDENTIAL_ID",
+          "name": "OpenAI account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $('1. Webhook - Candidate Application').item.json.body.email }}",
+        "subject": "Update on Your Application",
+        "message": "={{ $json.output[0].content[0].text }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        1824,
+        640
+      ],
+      "id": "0d6a2ff2-a0bd-46f4-8949-6d893608a73b",
+      "name": "Send a message",
+      "webhookId": "ac25f15a-05fb-43c3-b2ad-94f917f511b1",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "YOUR_GMAIL_CREDENTIAL_ID",
+          "name": "Gmail account 5"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://forms.googleapis.com/v1/forms",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleOAuth2Api",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\n  \"info\": {\n    \"title\": \"Technical Assessment\"\n  }\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1728,
+        48
+      ],
+      "id": "25940f3c-106e-4a7e-bef8-e71e5df4a253",
+      "name": "HTTP Request",
+      "credentials": {
+        "googleOAuth2Api": {
+          "id": "YOUR_GOOGLE_CREDENTIAL_ID",
+          "name": "Google account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://forms.googleapis.com/v1/forms/{{ $json.formId }}:batchUpdate",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleOAuth2Api",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{\n  {\n    requests: $('Code in JavaScript').item.json.questions.map((q) => ({\n      createItem: {\n        item: {\n          title: q.question,\n          questionItem: {\n            question: {\n              choiceQuestion: {\n                type: \"RADIO\",\n                options: q.options.map(option => ({\n                  value: option\n                }))\n              }\n            }\n          }\n        },\n        location: {\n          index: 0\n        }\n      }\n    }))\n  }\n}}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1936,
+        48
+      ],
+      "id": "27461d53-ea47-4c78-9a70-62d2317e5b0d",
+      "name": "HTTP Request1",
+      "credentials": {
+        "googleOAuth2Api": {
+          "id": "YOUR_GOOGLE_CREDENTIAL_ID",
+          "name": "Google account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const text = $input.first().json.output[0].content[0].text;\n\nconst quiz = JSON.parse(text);\n\nreturn [\n  {\n    json: quiz\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1568,
+        256
+      ],
+      "id": "436fc2d9-87f2-49bc-9a99-c223eae30f8e",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://forms.googleapis.com/v1/forms/{{ $('HTTP Request').item.json.formId }}:batchUpdate",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleOAuth2Api",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{\n  {\n    requests: [\n      {\n        updateSettings: {\n          settings: {\n            quizSettings: {\n              isQuiz: true\n            }\n          },\n          updateMask: \"quizSettings.isQuiz\"\n        }\n      }\n    ]\n  }\n}}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        2128,
+        48
+      ],
+      "id": "c5318214-1c9b-475f-b875-714652c6b0e5",
+      "name": "HTTP Request2",
+      "credentials": {
+        "googleOAuth2Api": {
+          "id": "YOUR_GOOGLE_CREDENTIAL_ID",
+          "name": "Google account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const googleForm = $('HTTP Request1').first().json;\nconst quiz = $('Code in JavaScript').first().json;\n\nconst questionIds = googleForm.replies\n  .map(reply => reply.createItem?.questionId?.[0])\n  .filter(Boolean);\n\nconst questions = quiz.questions;\n\nif (questionIds.length !== questions.length) {\n  throw new Error(\n    `Question count mismatch: Google Forms returned ${questionIds.length} question IDs, but the quiz contains ${questions.length} questions.`\n  );\n}\n\nconst requests = questions.map((q, i) => {\n  const options = q.options.map(option => ({\n    value: option\n  }));\n\n  const correctAnswer = q.options[q.correct_answer_index];\n\n  return {\n    updateItem: {\n      item: {\n        itemId: googleForm.replies[i].createItem.itemId,\n        questionItem: {\n          question: {\n            questionId: questionIds[i],\n            choiceQuestion: {\n              type: \"RADIO\",\n              options: options\n            },\n            grading: {\n              pointValue: 1,\n              correctAnswers: {\n                answers: [\n                  {\n                    value: correctAnswer\n                  }\n                ]\n              }\n            }\n          }\n        }\n      },\n      location: {\n        index: i\n      },\n      updateMask:\n        \"questionItem.question.choiceQuestion.options,questionItem.question.grading\"\n    }\n  };\n});\n\nreturn [\n  {\n    json: {\n      requests\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2352,
+        48
+      ],
+      "id": "5e41c424-c1ba-4ca2-be75-061194638f36",
+      "name": "Code in JavaScript1"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://forms.googleapis.com/v1/forms/{{ $('HTTP Request').item.json.formId }}:batchUpdate",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleOAuth2Api",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{\n  $('Code in JavaScript1').first().json\n}}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        2560,
+        48
+      ],
+      "id": "1aeed9cb-9423-4952-9ceb-32dc1344e12a",
+      "name": "HTTP Request3",
+      "credentials": {
+        "googleOAuth2Api": {
+          "id": "YOUR_GOOGLE_CREDENTIAL_ID",
+          "name": "Google account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "=https://forms.googleapis.com/v1/forms/{{ $('HTTP Request').item.json.formId }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleOAuth2Api",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        2768,
+        48
+      ],
+      "id": "4b3ec79c-389d-476b-b27f-007541792dba",
+      "name": "HTTP Request4",
+      "credentials": {
+        "googleOAuth2Api": {
+          "id": "YOUR_GOOGLE_CREDENTIAL_ID",
+          "name": "Google account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $('1. Webhook - Candidate Application').item.json.body.email }}",
+        "subject": "You’ve Been Shortlisted – Technical Assessment Required",
+        "emailType": "text",
+        "message": "={{ $json.output[0].content[0].text }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        3232,
+        64
+      ],
+      "id": "a91eefb8-3856-496c-9fc3-94d2a94ab6d2",
+      "name": "Send a message1",
+      "webhookId": "f022a399-fe61-4797-9c6b-994e27aae77b",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "YOUR_GMAIL_CREDENTIAL_ID",
+          "name": "Gmail account 5"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "1. Webhook - Candidate Application": {
+      "main": [
+        [
+          {
+            "node": "2. Extract Resume Text (PDF)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2. Extract Resume Text (PDF)": {
+      "main": [
+        [
+          {
+            "node": "Message a model",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "5. Supabase - Initial Candidate Record": {
+      "main": [
+        [
+          {
+            "node": "6. IF - Resume Score >= 60",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "6. IF - Resume Score >= 60": {
+      "main": [
+        [
+          {
+            "node": "Message a model2",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "7A. Supabase - Update Resume Screening Failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "7A. Supabase - Update Resume Screening Failed": {
+      "main": [
+        [
+          {
+            "node": "Message a model4",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Message a model": {
+      "main": [
+        [
+          {
+            "node": "Message a model1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Message a model1": {
+      "main": [
+        [
+          {
+            "node": "5. Supabase - Initial Candidate Record",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Message a model2": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Message a model3": {
+      "main": [
+        [
+          {
+            "node": "Send a message1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Message a model4": {
+      "main": [
+        [
+          {
+            "node": "Send a message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request1": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request2": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript1": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request3": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request4",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request4": {
+      "main": [
+        [
+          {
+            "node": "Message a model3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "7ef9da6f-1ac6-42a5-8b2b-c6bbdaaf6d8b",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "YOUR_N8N_INSTANCE_ID"
+  },
+  "nodeGroups": [],
+  "id": "MynONOkSZEYRYcO5",
+  "tags": []
+}
